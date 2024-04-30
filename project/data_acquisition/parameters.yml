@@ -1,0 +1,5 @@
+kaggle_parms:
+  user: 'peacehegemony'
+  dataset_name: 'history-of-music-bnb'
+  file_name: 'detailedrecords.csv'
+  path: 'project/data/'

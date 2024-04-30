@@ -19,5 +19,8 @@ setup(
         "python-dateutil==2.9",
         "python-dotenv==0.10.5",
         "treelib",
+        "requests==2.31.0"
+        "pyyaml==6.0.1"
+        "kaggle==1.6.12"
     ],
 )
