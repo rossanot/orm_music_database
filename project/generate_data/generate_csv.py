@@ -1,70 +1,70 @@
-'''Generate a reduced version of spotify-2023.csv
-'''
-from typing import List
+import re
 import pandas as pd
 
 
-def get_df(FILE_PATH) -> pd.DataFrame:
-    """Load pd.DataFrame from .csv
+def get_reduced_df(df: pd.DataFrame):
+    columns = ['BL record ID', 'Composer', 'Title',
+               'Country of publication',
+               'Publication date (standardised)',
+               'Subject/genre terms']
+
+    return df[columns]
+
+
+def drop_nulls(df):
+    """_summary_
+
+    :param df: _description_
     """
-    return pd.read_csv(
-        FILE_PATH,
-        encoding='latin-1')
+    return df.dropna().reset_index(drop=True)
 
 
-def _get_idx_spec_char(
-        df: pd.DataFrame
-        ) -> List:
-    """Get index of rows with special characters
-    """
-    series = df.loc[(df['track_name'].str.contains('ï¿½ï¿½')) |
-                    (df['artist(s)_name'].str.contains('ï¿½ï¿½'))]
-    return series.index.to_list()
+def assign_dtypes(df):
+    df['Publication date standardised)'] = \
+        df['Publication date (standardised)'].astype(
+        'int64')
+    return df
 
 
-def drop_spec_char(
-        df: pd.DataFrame
-        ) -> pd.DataFrame:
-    """Drop rows with special characters"""
-    idx = _get_idx_spec_char(df)
-    return df.drop(idx)
-
-
-def get_single_singer(
+def explode_genre(
         df: pd.DataFrame
         ) -> pd.DataFrame:
-    """Return single singer records
+    """Explode genre column
     """
-    return df.loc[df['artist_count'] == 1]
+    df['genres'] = df['Subject/genre terms'].apply(lambda x: x.split(' ;'))
+    return df.explode('genres')
 
 
-def explode_artist(
-        df: pd.DataFrame
-        ) -> pd.DataFrame:
-    """Explode artists column
+def _subs_text(text):
+    pattern = r'\(Music[a-zA-Z\s]*\)$'
+    found = re.search(pattern, text)
+    
+    if found:
+        return [text[:found.span()[0]], found.group()]
+    else:
+        return [text, 'Compositor']
+
+
+def simple_composer(df):
+    """Drop '(Musician)' and '(Musical group)'
+    from composer and create 'Composer type'
+    and 'Composer (standardised)' columns
     """
-    df['artists'] = df['artist(s)_name'].apply(lambda x: x.split(', '))
-    return df.explode('artists')
-
-
-def save_csv(
-        df: pd.DataFrame
-        ):
-    """Save pd.DataFrame to csv
-    """
-    df.to_csv(
-        './project/data/reduced_spotify_2023.csv',
-        index=False
-        )
+    new_composer = df['Composer'].apply(_subs_text)
+    df[['Composer std', 'Composer info']] = pd.DataFrame(new_composer.to_list())
+    return df
 
 
 def main():
-    FILE_PATH = './project/data/spotify-2023.csv'
-    df = get_df(FILE_PATH)
-    df = drop_spec_char(df).loc[:50]
-    df = explode_artist(df)
-    save_csv(df)
+    PATH_INPUT = '../project/data/detailedrecords.csv'
+    PATH_OUTPUT = '../project/data/reduced_detailedrecords.csv'
+    df = pd.read_csv(PATH_INPUT)
+    df = get_reduced_df(df).copy()
+    df = drop_nulls(df)
+    df = assign_dtypes(df)
+    df = simple_composer(df)
+    df.to_csv(PATH_OUTPUT, index=False)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
