@@ -1,5 +1,4 @@
 from importlib import resources
-from pathlib import Path
 from project.data_acquisition.utils import (load_yaml,
                                             request_kaggle_dataset,
                                             unzip_file)

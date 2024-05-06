@@ -1,70 +1,128 @@
-'''Generate a reduced version of spotify-2023.csv
-'''
+"""Process the .csv file acquired from Kaggle
+"""
 from typing import List
+from importlib import resources
+import re
 import pandas as pd
 
 
-def get_df(FILE_PATH) -> pd.DataFrame:
-    """Load pd.DataFrame from .csv
+def load_csv(
+        path: str) -> pd.DataFrame:
+    """Load .csv file as a pd.DataFrame
     """
-    return pd.read_csv(
-        FILE_PATH,
-        encoding='latin-1')
-
-
-def _get_idx_spec_char(
-        df: pd.DataFrame
-        ) -> List:
-    """Get index of rows with special characters
-    """
-    series = df.loc[(df['track_name'].str.contains('ï¿½ï¿½')) |
-                    (df['artist(s)_name'].str.contains('ï¿½ï¿½'))]
-    return series.index.to_list()
-
-
-def drop_spec_char(
-        df: pd.DataFrame
-        ) -> pd.DataFrame:
-    """Drop rows with special characters"""
-    idx = _get_idx_spec_char(df)
-    return df.drop(idx)
-
-
-def get_single_singer(
-        df: pd.DataFrame
-        ) -> pd.DataFrame:
-    """Return single singer records
-    """
-    return df.loc[df['artist_count'] == 1]
-
-
-def explode_artist(
-        df: pd.DataFrame
-        ) -> pd.DataFrame:
-    """Explode artists column
-    """
-    df['artists'] = df['artist(s)_name'].apply(lambda x: x.split(', '))
-    return df.explode('artists')
+    return pd.read_csv(path, low_memory=False)
 
 
 def save_csv(
+        path: str,
         df: pd.DataFrame
-        ):
-    """Save pd.DataFrame to csv
+        ) -> None:
+    """Save pd.DataFrame as .csv file
     """
-    df.to_csv(
-        './project/data/reduced_spotify_2023.csv',
-        index=False
+    df.to_csv(path, index=False)
+
+
+def get_reduced_df(
+        df: pd.DataFrame
+        ) -> pd.DataFrame:
+    """Reduce dimension of df
+
+    :param df: a pd.DataFrame
+    :return: reduced df, pd.DataFrame
+    """
+    columns = ['BL record ID', 'Composer', 'Title',
+               'Country of publication',
+               'Publication date (standardised)',
+               'Subject/genre terms']
+
+    return df[columns]
+
+
+def drop_nulls(
+        df: pd.DataFrame
+        ) -> pd.DataFrame:
+    """Drop rows with null values
+
+    :param df: a pd.DataFrame
+    :return: reduced df, pd.DataFrame
+    """
+    return df.dropna().reset_index(drop=True)
+
+
+def assign_dtypes(
+        df: pd.DataFrame
+        ) -> pd.DataFrame:
+    """Assign column dtypes
+
+    :param df: a pd.DataFrame
+    :return: a pd.DataFrame
+    """
+    df['Publication date standardised)'] = \
+        df['Publication date (standardised)'].astype(
+        'int64')
+    return df
+
+
+def explode_genre(
+        df: pd.DataFrame
+        ) -> pd.DataFrame:
+    """Explode genre column
+
+    :param df: a pd.DataFrame
+    :return: exploded df wrt 'genres'
+    """
+    df['genres'] = df['Subject/genre terms'].apply(lambda x: x.split(' ;'))
+    return df.explode('genres')
+
+
+def _subs_text(
+        text: str
+        ) -> List:
+    """Find pattern in text and tag it
+
+    tags: 'pattern' or 'Composer'
+    :param text: Composer column row, str
+    :return: List[text, (`pattern`|'Composer')]
+    """
+    pattern = r'\(Music[a-zA-Z\s]*\)$'
+    found = re.search(pattern, text)
+
+    if found:
+        return [text[:found.span()[0]], found.group()]
+    else:
+        return [text, 'Composer']
+
+
+def simple_composer(
+        df: pd.DataFrame
+        ) -> pd.DataFrame:
+    """Obtain 'Composer std' and 'Composer info'
+    
+    'Composer std' contains `Composer` info
+    'Composer info' contains 'Musician' | 'Musical group'
+    :param df: a pd.DataFrame
+    :return: a pd.DataFrame
+    """
+    new_composer = df['Composer'].apply(_subs_text)
+    df[['Composer std', 'Composer info']] = pd.DataFrame(
+        new_composer.to_list()
         )
+    
+    return df
 
 
 def main():
-    FILE_PATH = './project/data/spotify-2023.csv'
-    df = get_df(FILE_PATH)
-    df = drop_spec_char(df).loc[:50]
-    df = explode_artist(df)
-    save_csv(df)
+    PATH_INPUT = resources.path('project.data',
+                                'detailedrecords.csv')
+    PATH_OUTPUT = resources.path('project.data',
+                                 'reduced_detailedrecords.csv')
+    df = load_csv(PATH_INPUT)
+    df = get_reduced_df(df).copy()
+    df = drop_nulls(df)
+    df = assign_dtypes(df)
+    df = simple_composer(df)
+    save_csv(PATH_OUTPUT, df)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
