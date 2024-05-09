@@ -57,10 +57,17 @@ def assign_dtypes(
     :param df: a pd.DataFrame
     :return: a pd.DataFrame
     """
-    df['Publication date standardised)'] = \
+    df['Publication date (standardised)'] = \
         df['Publication date (standardised)'].astype(
         'int64')
-    return df
+
+    return df.astype(
+        {
+            'Genre': 'object',
+            'Composer std': 'object',
+            'Composer info': 'object'
+            }
+            )
 
 
 def explode_genre(
@@ -71,8 +78,11 @@ def explode_genre(
     :param df: a pd.DataFrame
     :return: exploded df wrt 'genres'
     """
-    df['genres'] = df['Subject/genre terms'].apply(lambda x: x.split(' ;'))
-    return df.explode('genres')
+    df['Genre'] = df['Subject/genre terms'].apply(lambda x: x.split(' ; '))
+
+    df = df.drop(['Subject/genre terms'], axis=1)
+
+    return df.explode('Genre')
 
 
 def _subs_text(
@@ -83,14 +93,14 @@ def _subs_text(
     tags: 'pattern' or 'Composer'
     :param text: Composer column row, str
     :return: List[text, (`pattern`|'Composer')]
-    """
-    pattern = r'\(Music[a-zA-Z\s]*\)$'
+    """ 
+    pattern = r'\(Music[a-zA-Z\s]*\)$|(\(Composer\))$'
     found = re.search(pattern, text)
 
     if found:
-        return [text[:found.span()[0]], found.group()]
+        return [text[:found.span()[0]-2], found.group()]
     else:
-        return [text, 'Composer']
+        return [text, 'Else']
 
 
 def simple_composer(
@@ -104,10 +114,13 @@ def simple_composer(
     :return: a pd.DataFrame
     """
     new_composer = df['Composer'].apply(_subs_text)
+
     df[['Composer std', 'Composer info']] = pd.DataFrame(
         new_composer.to_list()
         )
-    
+
+    df = df.drop(['Composer'], axis=1)
+
     return df
 
 
@@ -119,8 +132,9 @@ def main():
     df = load_csv(PATH_INPUT)
     df = get_reduced_df(df).copy()
     df = drop_nulls(df)
-    df = assign_dtypes(df)
     df = simple_composer(df)
+    df = explode_genre(df)
+    df = assign_dtypes(df)
     save_csv(PATH_OUTPUT, df)
 
 
