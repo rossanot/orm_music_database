@@ -11,7 +11,8 @@ from sqlalchemy.orm import sessionmaker
 from project.modules.models import Base
 from project.modules.models import (Composer,
                                     Track,
-                                    Country)
+                                    Country,
+                                    Genre)
 
 
 def load_csv_data(filepath):
@@ -34,7 +35,7 @@ def populate_database(session, music_data):
     It has been adapted from Real Python
     "working-with-sqlalchemy-and-python-objects"
     """
-    for row in music_data[:10]:
+    for row in music_data[:100]:
         composer = (
             session.query(Composer)
             .filter(Composer.composer_name == row['Composer std'])
@@ -68,10 +69,23 @@ def populate_database(session, music_data):
                 country_name=row['Country of publication']
             )
             session.add(country)
+        
+        genre = (
+            session.query(Genre)
+            .filter(Genre.genre_name == row['Genre'])
+            .one_or_none()
+        )
+        if genre is None:
+            genre = Genre(
+                genre_name=row['Genre']
+                )
+            session.add(genre)
 
         # add the items to the relationships
         composer.tracks.append(track)
         country.tracks.append(track)
+        track.genres.append(genre)
+        genre.tracks.append(track)
         session.commit()
 
     session.close()

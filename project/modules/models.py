@@ -4,6 +4,13 @@ from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
 
+track_genre = Table(
+    'track_genre',
+    Base.metadata,
+    Column('track_id', Integer, ForeignKey('track.track_id')),
+    Column('genre_id', Integer, ForeignKey('genre.genre_id'))
+)
+
 
 class Composer(Base):
     __tablename__ = 'composer'
@@ -19,6 +26,9 @@ class Track(Base):
     country_id = Column(Integer, ForeignKey('country.country_id'))
     track_bl_id = Column(Integer)
     track_name = Column(String)
+    genres = relationship(
+        'Genre', secondary=track_genre, back_populates='tracks'
+    )
 
 
 class Country(Base):
@@ -28,5 +38,11 @@ class Country(Base):
     tracks = relationship('Track', backref=backref('country'))
 
 
-
+class Genre(Base):
+    __tablename__ = 'genre'
+    genre_id = Column(Integer, primary_key=True)
+    genre_name = Column(String)
+    tracks = relationship(
+        'Track', secondary=track_genre, back_populates='genres'
+    )
 
