@@ -1,20 +1,26 @@
 """
-This program gathers information from the reduced_spotify_2023.db
+This program gathers information from the records.db
 SQLite database file
 Adapted from: Real Python #working-with-sqlalchemy-and-python-objects
 """
-
+from typing import List
 from importlib import resources
 
 from sqlalchemy import and_, create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import asc, desc, func
 
-from project.modules.models import Artist, Track, Scale
+from project.modules.models import (Composer,
+                                    Track,
+                                    Country,
+                                    Genre)
 
 
-def get_tracks_by_artists(session, ascending=True):
-    """Get a list of tracks by artist
+def get_tracks_by_composer(
+        session,
+        ascending: bool = True
+        ) -> None:
+    """Get a list of tracks by composer
 
     Adapted from: Real Python #working-with-sqlalchemy-and-python-objects
     """
@@ -25,17 +31,20 @@ def get_tracks_by_artists(session, ascending=True):
 
     return (
         session.query(
-            Artist.artist_name,
+            Composer.composer_name,
             func.count(Track.track_name).label('total_tracks')
         )
-        .join(Artist.tracks)
-        .group_by(Artist.artist_name)
+        .join(Composer.tracks)
+        .group_by(Composer.composer_name)
         .order_by(direction('total_tracks'))
     )
 
 
-def get_artists(session, ascending=True):
-    """Retrieve all artists sorted in order
+def get_composers(
+        session,
+        ascending: bool = True
+        ) -> None:
+    """Retrieve all composers sorted in order
     """
     if not isinstance(ascending, bool):
         raise ValueError(f'Sorting value invalid: {ascending}')
@@ -43,78 +52,108 @@ def get_artists(session, ascending=True):
     direction = asc if ascending else desc
 
     return (
-        session.query(Artist.artist_name)
-        .order_by(direction(Artist.artist_name))
+        session.query(Composer.composer_name)
+        .order_by(direction(Composer.composer_name))
     ).all()
 
 
-def add_track(session, new_track, new_artist, new_scale_id):
+def add_track(session,
+              new_track_name: str,
+              new_composer_name: str,
+              new_country_name: str,
+              new_genre_name: str
+              ) -> None:
     """Add a new track to the database
     """
 
     # check if the tracks exists
     track = (
         session.query(Track)
-        .join(Artist.tracks)
-        .filter(Track.track_name == new_track)
+        .join(Composer)  # Composer.tracks
+        .join(Country)
+        .filter(Track.track_name == new_track_name)
         .filter(
             and_(
-                Artist.artist_name == new_artist
-            )
+                Composer.composer_name == new_composer_name
+            ),
+            and_(Country.country_name == new_country_name)
         )
-        .filter(Track.scale_id == new_scale_id)
+        .filter(Track.genres.any(
+            Genre.genre_name == new_genre_name
+            )
+            )
         .one_or_none()
     )
 
-    # Does the track already exist?
+    # Check if the track already exists
     if track is not None:
         return
 
-    # Check if the track exists for the artist
+    # Check if the track exists for the composer
     track = (
         session.query(Track)
-        .join(Artist.tracks)
-        .filter(Track.track_name == new_track)
+        .filter(Track.track_name == new_track_name)
         .filter(
             and_(
-                Artist.artist_name == new_artist
-            )
+                Composer.composer_name == new_composer_name
+            ),
+            and_(Country.country_name == new_country_name)
         )
+        .filter(Track.genres.any(
+            Genre.genre_name == new_genre_name
+            )
+            )
         .one_or_none()
     )
-    # Create the new book if needed
+
+    # Create the new track if needed
     if track is None:
-        track = Track(track_name=new_track)
+        track = Track(track_name=new_track_name)
 
-    # Get the author
-    artist = (
-        session.query(Artist)
+    # Composer
+    # Get the composer
+    composer = (
+        session.query(Composer)
         .filter(
             and_(
-                Artist.artist_name == new_artist
+                Composer.composer_name == new_composer_name
             )
         )
         .one_or_none()
     )
-    # Do we need to create the author?
-    if artist is None:
-        artist = Artist(artist_name=new_artist)
-        session.add(artist)
+    # Create composer if needed
+    if composer is None:
+        composer = Composer(composer_name=new_composer_name)
+        session.add(composer)
 
-    # Get the publisher
-    scale = (
-        session.query(Scale)
-        .filter(Scale.scale_id == new_scale_id)
+    # Country
+    # Get the country
+    country = (
+        session.query(Country)
+        .filter(Country.country_name == new_country_name)
         .one_or_none()
     )
-    # Do we need to create the publisher?
-    if scale is None:
-        scale = Scale(scale_id=new_scale_id)
-        session.add(scale)
+    # Create country if needed
+    if country is None:
+        country = Country(country_name=new_country_name)
+        session.add(country)
 
-    # Initialize the book relationships
-    track.artists.append(artist)
-    track.scale = scale
+    # Genre
+    # Get the genre
+    genre = (
+        session.query(Genre)
+        .filter(Genre.genre_name == new_genre_name)
+        .one_or_none()
+    )
+    # Create country if needed
+    if genre is None:
+        genre = Genre(genre_name=new_genre_name)
+        session.add(genre)
+
+    # Initialize the track relationships
+    track.country = country
+    track.composer = composer
+    track.genres.append(genre)
     session.add(track)
 
     # Commit to the database
@@ -127,7 +166,7 @@ def main():
 
     # Connect to the database using SQLAlchemy
     with resources.path(
-        'project.data', 'reduced_spotify_2023.db'
+        'project.data', 'records.db'
     ) as sqlite_filepath:
         engine = create_engine(f'sqlite:///{sqlite_filepath}')
     Session = sessionmaker()
@@ -135,29 +174,48 @@ def main():
     session = Session()
 
     # Get the number of tracks by each artist
-    tracks_by_artists = get_tracks_by_artists(session, ascending=False)
-    for row in tracks_by_artists:
-        print("Artist: {:>18}, Total tracks: {:2}".format(
-            row.artist_name, row.total_tracks
+    tracks_by_composers = get_tracks_by_composer(session, ascending=False)
+    for row in tracks_by_composers:
+        print("Composer: {:>18}, Total tracks: {:2}".format(
+            row.composer_name, row.total_tracks
         ))
-    print()
+    
+    print("\nDone retrieving total of tracks by composer\n")
 
-    # Get artists
-    artists = get_artists(session)
-    for i, row in enumerate(artists):
-        print('Artist {:.>4}: {:.>18}'.format(i, row.artist_name))
+    # Get composers
+    composers = get_composers(session)
+    for i, row in enumerate(composers):
+        print('Composer {:.>4}: {:.>18}'.format(i, row.composer_name))
+
+    print("\nDone retrieving composers\n")
 
     # Add a new track
     add_track(
         session,
-        new_track='New track name',
-        new_artist='Artist X',
-        new_scale_id='1',
+        new_track_name='This is a song name',
+        new_composer_name='Composer X',
+        new_country_name='Rumania',
+        new_genre_name='Electro Pop'
     )
 
-    artists = get_artists(session)
-    for i, row in enumerate(artists):
-        print('Artist {:.>4}: {:.>18}'.format(i, row.artist_name))
+    add_track(
+        session,
+        new_track_name='This is a song name',
+        new_composer_name='Composer X',
+        new_country_name='Rumania',
+        new_genre_name='New Genre X'
+    )
+
+    print("\nDone adding new track\n")
+
+    print('\nCheck that the new song has been added\n')
+    composers = get_composers(session)
+    for i, row in enumerate(composers):
+        print(
+            'Composer {:.>4}: {:.>18}'.format(i, row.composer_name)
+            )
+
+    print("\nDone retrieving composers\n")
 
 
 if __name__ == '__main__':

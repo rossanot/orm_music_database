@@ -35,7 +35,7 @@ def populate_database(session, music_data):
     It has been adapted from Real Python
     "working-with-sqlalchemy-and-python-objects"
     """
-    for row in music_data[:100]:
+    for row in music_data[:10]:
         composer = (
             session.query(Composer)
             .filter(Composer.composer_name == row['Composer std'])
